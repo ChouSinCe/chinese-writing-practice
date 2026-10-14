@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Noto+Serif+SC:wght@500;700&family=ZCOOL+KuaiLe&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.26.0/dist/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.7.3/dist/hanzi-writer.min.js"></script>
 <style>
 /* Layout: a single exercise-book column; each sentence is a row of 田字格 boxes with pinyin above. */
 :root {
@@ -85,6 +86,8 @@ textarea { width: 100%; min-height: 130px; resize: vertical; font-family: var(--
     linear-gradient(45deg, transparent calc(50% - .5px), var(--grid-soft) calc(50% - .5px), var(--grid-soft) calc(50% + .5px), transparent calc(50% + .5px)),
     linear-gradient(-45deg, transparent calc(50% - .5px), var(--grid-soft) calc(50% - .5px), var(--grid-soft) calc(50% + .5px), transparent calc(50% + .5px));
   opacity: .7; }
+.box .hw { position: absolute; inset: 0; z-index: 2; touch-action: none; }
+.box .hw svg { display: block; }
 .box canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; }
 .box .ans { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--hanzi); font-size: calc(var(--box) * .72); color: var(--ink); z-index: 1; }
 .box .ans.ghost { opacity: .22; }
@@ -273,7 +276,61 @@ Notes are short, simple English for a child, empty when ok.`;
   return boxes.map((_, k) => { const r = res.find(x => Number(x?.n) === k + 1) || res[k] || {}; return { ok: r.ok === true, note: String(r.note || '') }; });
 }
 
+/* ---------- Stroke checking (used when Claude is not available, e.g. GitHub Pages) ---------- */
+const canStrokeCheck = () => !window.claude && typeof HanziWriter !== 'undefined';
+
+function setupStroke(it, i, boxes, ctrl, status) {
+  ctrl.innerHTML = `<div class="actions"><button class="btn" type="button">Finish and check</button><button class="btn ghost" type="button">Write again</button></div><p class="hint">Write each character stroke by stroke, in the correct stroke order. A wrong stroke fades away. After 3 misses on one stroke, a hint appears and that character counts as wrong.</p>`;
+  const [finBtn, againBtn] = ctrl.querySelectorAll('button');
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let st = [], finished = false;
+
+  function mark(k, kind) {
+    const b = boxes[k];
+    b.el.classList.toggle('ok', kind === 'ok'); b.el.classList.toggle('bad', kind === 'bad');
+    b.fix.textContent = kind === 'bad' ? b.c.ch : '';
+  }
+  function finish() {
+    if (finished) return; finished = true; finBtn.hidden = true;
+    st.forEach((s, k) => {
+      if (s.skip) return;
+      if (!s.done) { s.bad = true; try { s.writer.cancelQuiz(); s.writer.showCharacter(); } catch (e) {} }
+      mark(k, s.bad ? 'bad' : 'ok');
+    });
+    const counted = st.map((s, k) => s.skip ? -1 : k).filter(k => k >= 0);
+    it.result = { wrong: counted.filter(k => st[k].bad), total: counted.length };
+    showStatus(status, it); updateScore();
+  }
+  function start() {
+    finished = false; finBtn.hidden = false; it.result = null; showStatus(status, it); updateScore();
+    st = boxes.map((b, k) => {
+      b.el.querySelector('.hw')?.remove(); mark(k, '');
+      const host = document.createElement('div'); host.className = 'hw'; b.el.appendChild(host);
+      const size = b.el.clientWidth || 160;
+      const s = { done: false, bad: false, skip: false, writer: null };
+      try {
+        s.writer = HanziWriter.create(host, b.c.ch, {
+          width: size, height: size, padding: Math.round(size * 0.08), renderer: 'svg',
+          showCharacter: false, showOutline: false, showHintAfterMisses: 3, highlightOnComplete: true,
+          strokeColor: css('--ink'), drawingColor: css('--pen'), highlightColor: css('--ok'), outlineColor: css('--grid-soft'),
+          drawingWidth: Math.max(4, Math.round(size / 18)), leniency: 1.3,
+          onLoadCharDataError: () => { s.skip = true; s.done = true; host.textContent = ''; },
+        });
+        s.writer.quiz({
+          onMistake: d => { if (d.mistakesOnStroke >= 3) s.bad = true; },
+          onComplete: () => { s.done = true; mark(k, s.bad ? 'bad' : 'ok'); if (st.every(x => x.done)) finish(); },
+        });
+      } catch (e) { s.skip = true; s.done = true; }
+      return s;
+    });
+  }
+  finBtn.onclick = finish;
+  againBtn.onclick = () => { st.forEach(s => { try { s.writer?.cancelQuiz(); } catch (e) {} }); start(); };
+  requestAnimationFrame(start);
+}
+
 function setupDraw(it, i, boxes, ctrl, status) {
+  if (canStrokeCheck()) return setupStroke(it, i, boxes, ctrl, status);
   ctrl.innerHTML = `<div class="actions"><button class="btn" type="button">Check my writing</button><button class="btn ghost" type="button">Clear boxes</button></div><p class="hint" hidden></p><ul class="notes" hidden></ul>`;
   const [checkBtn, clearBtn] = ctrl.querySelectorAll('button');
   const hint = ctrl.querySelector('.hint'), notesEl = ctrl.querySelector('.notes');
@@ -282,32 +339,37 @@ function setupDraw(it, i, boxes, ctrl, status) {
   const marks = new Set();
   const say = t => { hint.textContent = t; hint.hidden = !t; };
 
+  let manual = false;
   function paintMark(k) {
     const b = boxes[k], bad = marks.has(k);
-    b.el.classList.toggle('bad', bad); b.el.classList.toggle('ok', !bad); b.fix.textContent = bad ? b.c.ch : '';
+    b.el.classList.toggle('bad', bad); b.el.classList.toggle('ok', !bad && !manual); b.fix.textContent = bad ? b.c.ch : '';
     b.el.setAttribute('aria-label', `${b.c.ch}: marked ${bad ? 'wrong' : 'right'}. Press to change.`);
   }
   function commit() { it.result = { wrong: [...marks].sort((a, b) => a - b), total: boxes.length }; showStatus(status, it); updateScore(); }
 
   function showMarks(results, byClaude) {
-    phase = 'marked'; marks.clear();
+    phase = byClaude ? 'marked' : 'manual'; manual = !byClaude; marks.clear();
     boxes.forEach((b, k) => {
       if (!results[k].ok) marks.add(k);
       const a = document.createElement('span'); a.className = 'ans ghost'; a.textContent = b.c.ch; b.el.insertBefore(a, b.el.firstChild);
       pens[k].cv.style.pointerEvents = 'none';
       b.el.classList.add('marking'); b.el.tabIndex = 0; b.el.setAttribute('role', 'button');
-      const toggle = () => { if (phase !== 'marked') return; marks.has(k) ? marks.delete(k) : marks.add(k); paintMark(k); commit(); };
+      const toggle = () => { if (phase !== 'marked' && phase !== 'manual') return; marks.has(k) ? marks.delete(k) : marks.add(k); paintMark(k); if (phase === 'marked') commit(); };
       b.el.onclick = toggle; b.el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
       paintMark(k);
     });
     const notes = results.map((r, k) => !r.ok && r.note ? `<li><b>${boxes[k].c.ch}</b> ${r.note.replace(/[<>&]/g, '')}</li>` : '').join('');
     notesEl.innerHTML = notes; notesEl.hidden = !notes;
-    say(byClaude ? 'Checked by Claude. Tap a box to change its mark if you disagree.' : 'Compare with the faint answers. Tap any box that is wrong.');
-    checkBtn.hidden = true; clearBtn.textContent = 'Write again';
-    commit();
+    say(byClaude ? 'Checked by Claude. Tap a box to change its mark if you disagree.' : 'Compare with the faint answers. Tap every box that is wrong, then press Done marking.');
+    clearBtn.textContent = 'Write again';
+    if (byClaude) { checkBtn.hidden = true; commit(); } else { checkBtn.textContent = 'Done marking'; }
   }
 
   checkBtn.onclick = async () => {
+    if (phase === 'manual') {
+      phase = 'marked'; manual = false; boxes.forEach((_, k) => paintMark(k)); checkBtn.hidden = true;
+      say('Tap a box to change its mark.'); commit(); return;
+    }
     if (phase !== 'write') return;
     const blank = pens.map(p => p.isBlank());
     if (blank.every(Boolean)) { say('Write the characters in the boxes first.'); return; }
@@ -329,7 +391,7 @@ function setupDraw(it, i, boxes, ctrl, status) {
   };
 
   clearBtn.onclick = () => {
-    phase = 'write'; it.result = null; marks.clear(); say(''); notesEl.hidden = true; notesEl.innerHTML = '';
+    phase = 'write'; manual = false; it.result = null; marks.clear(); say(''); notesEl.hidden = true; notesEl.innerHTML = '';
     checkBtn.hidden = false; checkBtn.textContent = 'Check my writing'; clearBtn.textContent = 'Clear boxes';
     boxes.forEach((b, k) => { b.el.className = 'box'; b.el.onclick = null; b.el.onkeydown = null; b.el.removeAttribute('tabindex'); b.el.removeAttribute('role'); b.el.removeAttribute('aria-label');
       b.el.querySelector('.ans')?.remove(); b.fix.textContent = ''; pens[k].cv.style.pointerEvents = ''; pens[k].clear(); });
