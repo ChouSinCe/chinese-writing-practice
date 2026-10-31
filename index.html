@@ -30,7 +30,7 @@
   --hanzi: "Noto Serif SC", "Songti SC", "SimSun", serif;
   --body: "Andika", "Segoe UI", system-ui, sans-serif;
   --display: "ZCOOL KuaiLe", "Noto Serif SC", serif;
-  --box: 168px;
+  --box: 220px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --paper: #141b19; --sheet: #1c2522; --ink: #e3ece7; --muted: #9db0a8;
@@ -45,7 +45,7 @@
 
 * { box-sizing: border-box; }
 body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5; }
-.wrap { max-width: 860px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: grid; gap: 20px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: grid; gap: 20px; }
 header h1 { font-family: var(--display); font-weight: 400; font-size: 2.2rem; margin: 0; line-height: 1.1; text-wrap: balance; }
 header h1 small { font-family: var(--body); font-size: 1rem; color: var(--muted); margin-left: .5rem; }
 header p { margin: .35rem 0 0; color: var(--muted); max-width: 62ch; }
@@ -76,7 +76,7 @@ textarea { width: 100%; min-height: 130px; resize: vertical; font-family: var(--
 .status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
 .cells { display: flex; flex-wrap: wrap; gap: 6px 2px; align-items: flex-end; }
 .cell { display: grid; justify-items: center; gap: 4px; }
-.py { font-family: var(--body); font-size: 1.6rem; min-height: 1.5em; color: var(--ink); white-space: nowrap; }
+.py { font-family: var(--body); font-size: 1.9rem; min-height: 1.5em; color: var(--ink); white-space: nowrap; }
 .box { position: relative; width: var(--box); height: var(--box); border: 2px solid var(--grid); background: var(--sheet); touch-action: none; }
 .box::before, .box::after { content: ""; position: absolute; inset: 0; pointer-events: none;
   background:
@@ -99,7 +99,7 @@ textarea { width: 100%; min-height: 130px; resize: vertical; font-family: var(--
 .answer-in { width: 100%; font-family: var(--hanzi); font-size: 1.3rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tools { display: flex; gap: 6px; justify-content: center; width: var(--box); }
-.tool { flex: 1; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 8px; padding: 6px 4px; font: inherit; font-size: .9rem; cursor: pointer; touch-action: manipulation; }
+.tool { flex: 1; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 8px; padding: 10px 4px; font: inherit; font-size: 1rem; cursor: pointer; touch-action: manipulation; }
 .tool:active { background: var(--paper); }
 .tool:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .notes { margin: 8px 0 0; padding-left: 1.2rem; color: var(--bad); display: grid; gap: 2px; }
@@ -116,7 +116,7 @@ body.testing .sentence .actions .btn.ghost { display: none; }
 .score .pct { font-family: var(--display); font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; }
 .score .pct.good { color: var(--ok); } .score .pct.low { color: var(--bad); }
 .empty { color: var(--muted); text-align: center; padding: 24px; }
-@media (max-width: 480px) { :root { --box: 136px; } header h1 { font-size: 1.8rem; } }
+@media (max-width: 480px) { :root { --box: 150px; } header h1 { font-size: 1.8rem; } }
 @media (prefers-reduced-motion: no-preference) { .box { transition: background-color .2s, border-color .2s; } }
 </style>
 
@@ -152,7 +152,7 @@ body.testing .sentence .actions .btn.ghost { display: none; }
     <button class="btn ghost" id="exitTest" type="button">Exit test</button>
   </section>
   <section class="score" id="score" hidden aria-live="polite"></section>
-  <section id="sheet" class="wrap" style="padding:0;max-width:none"></section>
+  <section id="sheet" class="wrap" style="padding:0;max-width:none;width:100%"></section>
   <div class="checkbar" id="checkBar" hidden><button class="btn big-btn" id="checkTest" type="button">Check my test</button></div>
 </div>
 
