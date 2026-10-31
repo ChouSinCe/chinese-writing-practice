@@ -489,7 +489,7 @@ function attachPen(cv) {
     ctx = cv.getContext('2d'); ctx.scale(d, d);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--pen').trim() || '#2445a3';
-    ctx.lineWidth = Math.max(2.5, r.width / 16);
+    ctx.lineWidth = Math.max(2.5, r.width / 36);
     if (old) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, r.width, r.height); img.src = old; }
   };
   requestAnimationFrame(setup);
