@@ -21,9 +21,9 @@ An internet connection is needed the first time, because the pinyin library and 
 ## Checking answers
 
 - **Typing mode** is checked automatically, character by character.
-- **Writing mode** shows the correct characters faintly behind the child's writing. Tap any box that is wrong to mark it.
+- **Writing mode**: the child writes freely in the boxes, then presses **Check my writing**. Each character is compared stroke by stroke with the real character. Stroke order and stroke direction do not matter; a missing stroke, an extra stroke, or a stroke in the wrong place is marked wrong. Tap a box to change its mark if you disagree.
 
-Automatic handwriting checking by Claude only works when the page is opened as a Claude artifact. On GitHub Pages or a local file, writing mode uses the tap-to-mark check instead.
+Stroke shapes come from the free [hanzi-writer-data](https://github.com/chanind/hanzi-writer-data) set. The check is forgiving about size and proportions, so very similar characters with the same number of strokes (for example 未/末, 人/入, 田/由) may not be told apart. Tap the box to mark those yourself.
 
 ## Notes
 
