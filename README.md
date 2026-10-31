@@ -18,6 +18,10 @@ A simple web page for practising Chinese characters (汉字) at home.
 
 An internet connection is needed the first time, because the pinyin library and fonts load from a CDN.
 
+## Test mode
+
+Press **Start test** to take a test on the sentences in the box. The sentence list is hidden, so only the pinyin shows. The child writes (or types) every character, then presses **Check my test** once at the bottom. The page marks every character and shows the score as a percentage, with the characters to practise. **Practise mistakes again** starts a new test with only the sentences that had mistakes. **Exit test** goes back to practice.
+
 ## Checking answers
 
 - **Typing mode** is checked automatically, character by character.

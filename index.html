@@ -100,6 +100,16 @@ textarea { width: 100%; min-height: 130px; resize: vertical; font-family: var(--
 .notes { margin: 8px 0 0; padding-left: 1.2rem; color: var(--bad); display: grid; gap: 2px; }
 .notes b { font-family: var(--hanzi); margin-right: 6px; }
 .btn:disabled { opacity: .6; cursor: wait; }
+.btn.test { background: var(--grid); color: #fff; }
+.testbanner { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 18px; border-radius: 14px; background: var(--sheet); border: 2px solid var(--grid); }
+.testbanner strong { font-family: var(--display); font-weight: 400; font-size: 1.5rem; margin-right: 10px; color: var(--grid); }
+.testbanner span { color: var(--muted); }
+.checkbar { position: sticky; bottom: env(safe-area-inset-bottom, 0px); padding-block: 12px; background: linear-gradient(transparent, var(--paper) 30%); }
+.big-btn { width: 100%; font-size: 1.25rem; padding: 16px; }
+body.test-writing .sentence .actions, body.testing #inputPanel { display: none !important; }
+body.testing .sentence .actions .btn.ghost { display: none; }
+.score .pct { font-family: var(--display); font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.score .pct.good { color: var(--ok); } .score .pct.low { color: var(--bad); }
 .empty { color: var(--muted); text-align: center; padding: 24px; }
 @media (max-width: 480px) { :root { --box: 136px; } header h1 { font-size: 1.8rem; } }
 @media (prefers-reduced-motion: no-preference) { .box { transition: background-color .2s, border-color .2s; } }
@@ -113,7 +123,7 @@ textarea { width: 100%; min-height: 130px; resize: vertical; font-family: var(--
     <p>Type or paste Chinese sentences, one per line. Each one turns into pinyin over empty 田字格 boxes. Your child writes the characters, then checks them.</p>
   </header>
 
-  <section class="panel" aria-labelledby="inLbl">
+  <section class="panel" id="inputPanel" aria-labelledby="inLbl">
     <label class="lbl" id="inLbl" for="src">Sentences to practise</label>
     <textarea id="src" spellcheck="false"></textarea>
     <div class="row">
@@ -126,13 +136,19 @@ textarea { width: 100%; min-height: 130px; resize: vertical; font-family: var(--
     </div>
     <div class="row">
       <button class="btn" id="make" type="button">Make practice</button>
+      <button class="btn test" id="startTest" type="button">Start test</button>
       <button class="btn ghost" id="clearTxt" type="button">Clear text</button>
     </div>
     <p class="hint">Pinyin is generated automatically and follows context for most multi-reading characters (长大 zhǎng, 银行 háng). Check unusual names.</p>
   </section>
 
+  <section class="testbanner" id="testBanner" hidden>
+    <div><strong>Test</strong><span id="testInfo"></span></div>
+    <button class="btn ghost" id="exitTest" type="button">Exit test</button>
+  </section>
   <section class="score" id="score" hidden aria-live="polite"></section>
   <section id="sheet" class="wrap" style="padding:0;max-width:none"></section>
+  <div class="checkbar" id="checkBar" hidden><button class="btn big-btn" id="checkTest" type="button">Check my test</button></div>
 </div>
 
 <script>
@@ -198,7 +214,7 @@ function renderItem(it, i) {
   });
   const ctrl = card.querySelector('.ctrl');
   const status = card.querySelector('.status');
-  if (mode === 'type') setupType(it, i, boxes, ctrl, status); else setupDraw(it, i, boxes, ctrl, status);
+  it.api = mode === 'type' ? setupType(it, i, boxes, ctrl, status) : setupDraw(it, i, boxes, ctrl, status);
   return card;
 }
 
@@ -229,8 +245,9 @@ function setupType(it, i, boxes, ctrl, status) {
     showStatus(status, it); updateScore();
   };
   checkBtn.onclick = doCheck;
-  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) doCheck(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && !document.body.classList.contains('test-writing')) doCheck(); });
   resetBtn.onclick = () => { input.value = ''; it.result = null; paint([], false); showStatus(status, it); updateScore(); input.focus(); };
+  return { check: async () => { input.disabled = true; doCheck(); } };
 }
 
 /* ---------- Writing mode ---------- */
@@ -404,7 +421,10 @@ function setupDraw(it, i, boxes, ctrl, status) {
     }
     if (phase !== 'write') return;
     const blank = pens.map(p => p.isBlank());
-    if (blank.every(Boolean)) { say('Write the characters in the boxes first.'); return; }
+    if (blank.every(Boolean)) {
+      if (testing) { showMarks(boxes.map(() => ({ ok: false, note: 'left empty' })), 'auto'); return; }
+      say('Write the characters in the boxes first.'); return;
+    }
     if (!sampleFn) {
       phase = 'checking'; checkBtn.disabled = clearBtn.disabled = true; checkBtn.textContent = 'Checking…';
       try { showMarks(await gradeLocal(boxes, pens), 'auto'); }
@@ -435,6 +455,7 @@ function setupDraw(it, i, boxes, ctrl, status) {
       b.el.querySelector('.ans')?.remove(); b.fix.textContent = ''; pens[k].cv.style.pointerEvents = ''; pens[k].clear(); });
     showStatus(status, it); updateScore();
   };
+  return { check: () => checkBtn.onclick() };
 }
 
 function attachPen(cv) {
@@ -472,14 +493,48 @@ function updateScore() {
   const right = total - wrongCh.length;
   const uniq = [...new Set(wrongCh)];
   scoreEl.hidden = false;
-  scoreEl.innerHTML = `<span class="big">${right} / ${total}</span>
-    <span>${done.length} of ${items.length} sentences checked</span>
+  const pct = Math.round(right / total * 100);
+  scoreEl.innerHTML = `<span class="pct ${pct >= 80 ? 'good' : pct < 50 ? 'low' : ''}">${pct}%</span>
+    <span><b>${right} of ${total}</b> characters correct<br>${done.length} of ${items.length} sentences checked</span>
     ${uniq.length ? `<div class="chips" aria-label="Characters to practise">${uniq.map(c => `<span class="chip">${c}</span>`).join('')}</div>` : '<span class="status ok">No mistakes so far</span>'}
     <span class="spacer"></span>
     ${uniq.length ? '<button class="btn" type="button" id="redo">Practise mistakes again</button>' : ''}`;
   const redo = $('#redo');
-  if (redo) redo.onclick = () => { build(items.filter(it => it.result && it.result.wrong.length).map(it => it.text)); window.scrollTo({ top: sheet.offsetTop - 16 }); };
+  if (redo) redo.onclick = () => { const lines = items.filter(it => it.result && it.result.wrong.length).map(it => it.text);
+    if (testing) startTest(lines); else { build(lines); window.scrollTo({ top: sheet.offsetTop - 16 }); } };
 }
+
+/* ---------- Test mode ---------- */
+let testing = false;
+function readLines() {
+  let lines = src.value.split(/\n+/).map(s => s.trim()).filter(s => [...s].some(isHan));
+  if ($('#shuffle').checked) lines = lines.sort(() => Math.random() - .5);
+  return lines;
+}
+function startTest(lines) {
+  if (!lines.length) { sheet.innerHTML = '<p class="empty">Add at least one sentence with Chinese characters.</p>'; return; }
+  testing = true;
+  document.body.classList.add('testing', 'test-writing');
+  $('#testBanner').hidden = false; $('#checkBar').hidden = false; $('#checkTest').disabled = false; $('#checkTest').textContent = 'Check my test';
+  build(lines);
+  const n = items.reduce((t, it) => t + it.cells.filter(c => c.zh).length, 0);
+  $('#testInfo').textContent = `${items.length} sentences · ${n} characters. Write every character, then press Check my test at the bottom.`;
+  window.scrollTo(0, 0);
+}
+$('#startTest').onclick = () => startTest(readLines());
+$('#checkTest').onclick = async () => {
+  const btn = $('#checkTest'); btn.disabled = true;
+  for (let i = 0; i < items.length; i++) { btn.textContent = `Checking ${i + 1} of ${items.length}…`; try { await items[i].api.check(); } catch (e) {} }
+  document.body.classList.remove('test-writing');
+  $('#checkBar').hidden = true;
+  $('#testInfo').textContent = 'Results are below. Tap a box to change its mark if you disagree.';
+  updateScore(); scoreEl.scrollIntoView({ block: 'start' });
+};
+$('#exitTest').onclick = () => {
+  testing = false; document.body.classList.remove('testing', 'test-writing');
+  $('#testBanner').hidden = true; $('#checkBar').hidden = true;
+  build(readLines()); window.scrollTo(0, 0);
+};
 
 // Open with the sample practice so the page shows what it does.
 $('#make').click();
