@@ -98,6 +98,10 @@ textarea { width: 100%; min-height: 130px; resize: vertical; font-family: var(--
 .punct { font-family: var(--hanzi); font-size: 1.6rem; padding: 0 2px 6px; color: var(--muted); align-self: flex-end; }
 .answer-in { width: 100%; font-family: var(--hanzi); font-size: 1.3rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tools { display: flex; gap: 6px; justify-content: center; width: var(--box); }
+.tool { flex: 1; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 8px; padding: 6px 4px; font: inherit; font-size: .9rem; cursor: pointer; touch-action: manipulation; }
+.tool:active { background: var(--paper); }
+.tool:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .notes { margin: 8px 0 0; padding-left: 1.2rem; color: var(--bad); display: grid; gap: 2px; }
 .notes b { font-family: var(--hanzi); margin-right: 6px; }
 .btn:disabled { opacity: .6; cursor: wait; }
@@ -386,6 +390,13 @@ function setupDraw(it, i, boxes, ctrl, status) {
   const hint = ctrl.querySelector('.hint'), notesEl = ctrl.querySelector('.notes');
   let phase = 'write'; // write → checking → marked
   const pens = boxes.map(b => { const cv = document.createElement('canvas'); b.el.appendChild(cv); return attachPen(cv); });
+  const tools = boxes.map((b, k) => {
+    const t = document.createElement('div'); t.className = 'tools';
+    t.innerHTML = `<button type="button" class="tool" aria-label="Undo last stroke in box ${k + 1}">↶ Undo</button><button type="button" class="tool" aria-label="Clear box ${k + 1}">✕ Clear</button>`;
+    const [u, c] = t.querySelectorAll('button'); u.onclick = () => pens[k].undo(); c.onclick = () => pens[k].clear();
+    b.el.after(t); return t;
+  });
+  const showTools = on => tools.forEach(t => { t.hidden = !on; });
   const marks = new Set();
   const say = t => { hint.textContent = t; hint.hidden = !t; };
 
@@ -398,6 +409,7 @@ function setupDraw(it, i, boxes, ctrl, status) {
   function commit() { it.result = { wrong: [...marks].sort((a, b) => a - b), total: boxes.length }; showStatus(status, it); updateScore(); }
 
   function showMarks(results, byClaude) {
+    showTools(false);
     phase = byClaude ? 'marked' : 'manual'; manual = !byClaude; marks.clear();
     boxes.forEach((b, k) => {
       if (!results[k].ok) marks.add(k);
@@ -451,7 +463,7 @@ function setupDraw(it, i, boxes, ctrl, status) {
 
   clearBtn.onclick = () => {
     phase = 'write'; manual = false; it.result = null; marks.clear(); say(''); notesEl.hidden = true; notesEl.innerHTML = '';
-    checkBtn.hidden = false; checkBtn.textContent = 'Check my writing'; clearBtn.textContent = 'Clear boxes';
+    checkBtn.hidden = false; checkBtn.textContent = 'Check my writing'; clearBtn.textContent = 'Clear boxes'; showTools(true);
     boxes.forEach((b, k) => { b.el.className = 'box'; b.el.onclick = null; b.el.onkeydown = null; b.el.removeAttribute('tabindex'); b.el.removeAttribute('role'); b.el.removeAttribute('aria-label');
       b.el.querySelector('.ans')?.remove(); b.fix.textContent = ''; pens[k].cv.style.pointerEvents = ''; pens[k].clear(); });
     showStatus(status, it); updateScore();
@@ -461,7 +473,14 @@ function setupDraw(it, i, boxes, ctrl, status) {
 
 function attachPen(cv) {
   let ctx, drawing = false, last = null, inked = false, strokes = [];
-  const api = { cv, isBlank: () => !inked, strokes: () => strokes, clear: () => { inked = false; strokes = []; ctx?.clearRect(0, 0, 9999, 9999); } };
+  const redraw = () => {
+    if (!ctx) return; ctx.clearRect(0, 0, 9999, 9999); ctx.fillStyle = ctx.strokeStyle;
+    strokes.forEach(st => { ctx.beginPath(); ctx.arc(st[0][0], st[0][1], ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(st[0][0], st[0][1]); st.slice(1).forEach(p => ctx.lineTo(p[0], p[1])); ctx.stroke(); });
+  };
+  const api = { cv, isBlank: () => !inked, strokes: () => strokes,
+    clear: () => { inked = false; strokes = []; ctx?.clearRect(0, 0, 9999, 9999); },
+    undo: () => { strokes.pop(); inked = strokes.length > 0; redraw(); } };
   const setup = () => {
     const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
     if (!r.width) return;
